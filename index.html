@@ -181,7 +181,8 @@
     <div class="res-title" id="res-title"></div>
     <div class="res-time" id="res-time"></div>
     <div class="res-msg" id="res-msg"></div>
-    <button class="btn" style="margin-top:auto" onclick="goHome()">กลับหน้าหลัก</button>
+    <button class="btn" id="res-retry" style="margin-top:auto;display:none">ลองสแกนอีกครั้ง</button>
+    <button class="btn ghost" id="res-home" onclick="goHome()">กลับหน้าหลัก</button>
   </section>
 </div>
 
@@ -192,9 +193,10 @@
 const CONFIG = {
   SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxMLKIf38MorgscrX_glLs96fBinXAe-szmjB-k_6KJpFobVcT5sAMLEWq0nzMCYrkK_g/exec',
   MODEL_URL: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/',
-  SCAN_TIMEOUT_MS: 25000,
+  SCAN_TIMEOUT_MS: 30000,
   REGISTER_SAMPLES: 5,
-  CHECK_SAMPLES: 3,
+  CHECK_SAMPLES: 2,
+  REQUIRE_BLINK: false,   // true = ต้องกระพริบตาก่อน (กันรูปถ่ายได้ดีกว่า แต่สแกนยากขึ้น)
 };
 
 const $ = id => document.getElementById(id);
@@ -240,7 +242,7 @@ async function init() {
       faceapi.nets.faceLandmark68Net.loadFromUri(CONFIG.MODEL_URL),
       faceapi.nets.faceRecognitionNet.loadFromUri(CONFIG.MODEL_URL),
     ]);
-    detectorOpts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+    detectorOpts = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 });
 
     msg.textContent = 'กำลังโหลดการตั้งค่า...';
     state.settings = (await api('config')).settings;
@@ -401,14 +403,10 @@ function eyeRatio(eye) {
 /** ตรวจคุณภาพภาพ: ต้องมีหน้าเดียว ขนาดพอดี อยู่กลางกรอบ */
 function faceProblem(dets, v) {
   if (!dets.length) return 'ไม่พบใบหน้า — มองตรงเข้ากล้อง';
-  if (dets.length > 1) return 'พบหลายใบหน้า — ให้มีคนเดียวในกล้อง';
-  const box = dets[0].detection.box;
-  const w = box.width / v.videoWidth;
-  if (w < 0.28) return 'ขยับหน้าเข้ามาใกล้อีกนิด';
-  if (w > 0.8) return 'ถอยออกไปอีกนิด';
-  const cx = (box.x + box.width / 2) / v.videoWidth;
-  if (cx < 0.25 || cx > 0.75) return 'เลื่อนหน้าให้อยู่กลางกรอบ';
-  if (dets[0].detection.score < 0.6) return 'แสงน้อยเกินไป — หันหน้าเข้าหาแสง';
+  // ถ้ามีหลายหน้า ใช้หน้าที่ใหญ่ที่สุด (คนที่ถือมือถือ)
+  dets.sort((a, b) => b.detection.box.area - a.detection.box.area);
+  const w = dets[0].detection.box.width / v.videoWidth;
+  if (w < 0.12) return 'ขยับหน้าเข้ามาใกล้อีกนิด';
   return null;
 }
 
@@ -429,7 +427,7 @@ async function scanFace(mode) {
   const need = mode === 'register' ? CONFIG.REGISTER_SAMPLES : CONFIG.CHECK_SAMPLES;
   const started = Date.now();
   const ears = [];
-  let closed = false, blinked = mode === 'register';
+  let closed = false, blinked = mode === 'register' || !CONFIG.REQUIRE_BLINK;
   const samples = [];
   oval.className = 'oval';
   state.scanning = true;
@@ -451,8 +449,8 @@ async function scanFace(mode) {
       ears.push(e); if (ears.length > 15) ears.shift();
       const open = Math.max(...ears);
       if (ears.length >= 4) {
-        if (!closed && e < open * 0.75) closed = true;
-        else if (closed && e > open * 0.88) blinked = true;
+        if (!closed && e < open * 0.85) closed = true;
+        else if (closed && e > open * 0.92) blinked = true;
       }
       setHint(blinked ? 'ดีมาก! นิ่งไว้สักครู่' : 'กระพริบตา 1 ครั้ง', 'ยืนยันว่าเป็นคนจริง ไม่ใช่รูปถ่าย', blinked ? 0.4 : 0.15);
       continue;
@@ -465,14 +463,14 @@ async function scanFace(mode) {
     if (prob) { oval.className = 'oval'; setHint(prob); continue; }
     const d = Array.from(dets[0].descriptor);
     // ทุกเฟรมต้องเป็นคนเดียวกัน
-    if (samples.length && dist(d, samples[0]) > 0.6) { samples.length = 0; setHint('ใบหน้าเปลี่ยนไป เริ่มเก็บใหม่'); continue; }
+    if (samples.length && dist(d, samples[0]) > 0.7) { samples.length = 0; setHint('ใบหน้าเปลี่ยนไป เริ่มเก็บใหม่'); continue; }
     samples.push(d);
     oval.className = 'oval good';
-    const base = mode === 'register' ? 0 : 0.4;
-    setHint(mode === 'register' ? 'ค่อย ๆ หันซ้าย–ขวาเล็กน้อย' : 'นิ่งไว้...',
+    const base = mode === 'register' || !CONFIG.REQUIRE_BLINK ? 0 : 0.4;
+    setHint(mode === 'register' ? 'ค่อย ๆ หันซ้าย–ขวาเล็กน้อย' : 'นิ่งไว้สักครู่...',
             `เก็บข้อมูล ${samples.length}/${need}`, base + (1 - base) * samples.length / need);
     if (samples.length >= need) { oval.className = 'oval done'; return average(samples); }
-    await sleep(mode === 'register' ? 350 : 120);
+    await sleep(mode === 'register' ? 350 : 80);
   }
   throw new Error('ยกเลิกแล้ว');
 }
@@ -499,11 +497,15 @@ async function startCheck(type) {
   } catch (e) {
     if (e.message === 'ยกเลิกแล้ว') return;
     closeCamera();
-    showResult(false, label + 'ไม่สำเร็จ', '', escapeHtml(e.message));
+    showResult(false, label + 'ไม่สำเร็จ', '', escapeHtml(e.message), () => startCheck(type));
   }
 }
 
-function showResult(ok, title, time, msg) {
+function showResult(ok, title, time, msg, retry) {
+  const rb = $('res-retry');
+  rb.style.display = retry ? 'flex' : 'none';
+  rb.onclick = retry || null;
+  $('res-home').style.marginTop = retry ? '' : 'auto';
   $('res-icon').className = 'res-icon ' + (ok ? 'ok' : 'bad');
   $('res-icon').textContent = ok ? '✓' : '✕';
   $('res-title').textContent = title;
