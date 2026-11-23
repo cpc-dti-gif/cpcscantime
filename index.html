@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>ลงเวลาสแกนหน้า</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
+<style>
+  :root{
+    --brand:#0f766e; --brand-d:#115e59; --in:#0f766e; --out:#c2410c;
+    --bg:#f4f6f5; --card:#fff; --ink:#1c2321; --mute:#6b7572; --line:#e3e8e6;
+    --ok:#15803d; --bad:#b91c1c; --warn:#b45309;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Sarabun',system-ui,sans-serif;background:var(--bg);color:var(--ink);
+       -webkit-tap-highlight-color:transparent;font-size:16px}
+  #app{max-width:480px;margin:0 auto;min-height:100%;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .screen{display:none;padding:20px 18px 32px;min-height:100vh;flex-direction:column}
+  .screen.active{display:flex}
+  h1{font-size:22px;font-weight:700}
+  h2{font-size:18px;font-weight:700;margin-bottom:6px}
+  p.mute,.mute{color:var(--mute);font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px}
+  label{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}
+  input[type=text],input[type=password],input[type=tel]{width:100%;font:inherit;font-size:18px;padding:12px 14px;
+       border:1.5px solid var(--line);border-radius:12px;background:#fff;outline:none}
+  input:focus{border-color:var(--brand)}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;font:inherit;font-weight:700;
+       font-size:17px;padding:14px;border-radius:14px;border:0;background:var(--brand);color:#fff;margin-top:16px;cursor:pointer}
+  .btn:disabled{opacity:.4}
+  .btn.ghost{background:transparent;color:var(--brand);border:1.5px solid var(--line)}
+  .link{background:none;border:0;color:var(--mute);font:inherit;font-size:14px;text-decoration:underline;padding:8px;cursor:pointer}
+  .center{text-align:center}
+  .spinner{width:42px;height:42px;border:4px solid var(--line);border-top-color:var(--brand);border-radius:50%;
+       animation:spin 1s linear infinite;margin:0 auto 18px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* home */
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .hello{font-size:14px;color:var(--mute)}
+  .clock{font-size:52px;font-weight:700;letter-spacing:1px;font-variant-numeric:tabular-nums;line-height:1.1}
+  .date{color:var(--mute);margin-top:2px}
+  .gps{display:flex;align-items:center;gap:10px;font-size:15px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--mute);flex:none}
+  .gps.ok .dot{background:var(--ok)} .gps.bad .dot{background:var(--bad)} .gps.wait .dot{background:var(--warn);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+  .big{border:0;border-radius:20px;padding:26px 10px;font:inherit;font-weight:700;font-size:20px;color:#fff;cursor:pointer}
+  .big small{display:block;font-weight:400;font-size:13px;opacity:.85;margin-top:4px}
+  .big.in{background:var(--in)} .big.out{background:var(--out)}
+  .big:disabled{opacity:.35}
+  .log{list-style:none;margin-top:6px}
+  .log li{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+  .log li:last-child{border:0}
+  .tag{font-weight:700} .tag.in{color:var(--in)} .tag.out{color:var(--out)}
+
+  /* camera */
+  #scr-camera{background:#0b0f0e;color:#fff;padding:16px}
+  .cam-wrap{position:relative;width:100%;aspect-ratio:3/4;border-radius:22px;overflow:hidden;background:#000;margin-top:12px}
+  .cam-wrap video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  .oval{position:absolute;inset:12% 16% 16%;border:4px solid rgba(255,255,255,.55);border-radius:50%;transition:border-color .2s}
+  .oval.good{border-color:#34d399} .oval.done{border-color:#34d399;box-shadow:0 0 0 999px rgba(16,185,129,.25)}
+  .hint{margin-top:16px;font-size:20px;font-weight:700;text-align:center;min-height:56px}
+  .sub{text-align:center;color:#9ca3a0;font-size:14px}
+  .progress{height:6px;background:#1f2a27;border-radius:6px;margin-top:10px;overflow:hidden}
+  .progress i{display:block;height:100%;width:0;background:#34d399;transition:width .2s}
+  #scr-camera .btn.ghost{color:#fff;border-color:#334}
+
+  /* result */
+  .res-icon{width:96px;height:96px;border-radius:50%;margin:40px auto 18px;display:flex;align-items:center;justify-content:center;font-size:52px;color:#fff}
+  .res-icon.ok{background:var(--ok)} .res-icon.bad{background:var(--bad)}
+  .res-title{font-size:24px;font-weight:700;text-align:center}
+  .res-time{font-size:48px;font-weight:700;text-align:center;margin-top:6px;font-variant-numeric:tabular-nums}
+  .res-msg{text-align:center;color:var(--mute);margin-top:10px;line-height:1.5}
+
+  .consent{font-size:14px;line-height:1.6;background:#f7faf9;border:1px solid var(--line);border-radius:12px;padding:12px;color:#33403c}
+  .check{display:flex;gap:10px;align-items:flex-start;margin-top:12px;font-size:15px;font-weight:600}
+  .check input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--brand)}
+  .err{color:var(--bad);font-size:14px;margin-top:10px;min-height:20px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- โหลด -->
+  <section id="scr-loading" class="screen active" style="justify-content:center">
+    <div class="center">
+      <div class="spinner" id="load-spin"></div>
+      <h2>ระบบลงเวลาสแกนหน้า</h2>
+      <p class="mute" id="load-msg">กำลังเตรียมระบบ...</p>
+      <button class="btn ghost" id="load-retry" style="display:none" onclick="location.reload()">ลองใหม่</button>
+    </div>
+  </section>
+
+  <!-- ตั้งค่าครั้งแรก -->
+  <section id="scr-setup" class="screen">
+    <h1>ยินดีต้อนรับ 👋</h1>
+    <p class="mute">ใส่รหัสพนักงานของคุณ (ทำครั้งเดียวต่อมือถือ)</p>
+    <div class="card">
+      <label for="in-id">รหัสพนักงาน</label>
+      <input id="in-id" type="text" inputmode="text" autocomplete="off" placeholder="เช่น 001">
+      <div class="err" id="setup-err"></div>
+      <button class="btn" id="btn-setup">ถัดไป</button>
+    </div>
+  </section>
+
+  <!-- หน้าหลัก -->
+  <section id="scr-home" class="screen">
+    <div class="top">
+      <div>
+        <div class="hello">สวัสดี</div>
+        <h1 id="h-name">-</h1>
+        <div class="mute" id="h-id"></div>
+      </div>
+      <button class="link" onclick="switchUser()">เปลี่ยนผู้ใช้</button>
+    </div>
+
+    <div class="card center">
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+    </div>
+
+    <div class="card">
+      <div class="gps wait" id="gps"><span class="dot"></span><span id="gps-text">กำลังหาตำแหน่ง...</span></div>
+    </div>
+
+    <div class="actions">
+      <button class="big in" id="btn-in" disabled onclick="startCheck('IN')">เข้างาน<small>สแกนหน้า</small></button>
+      <button class="big out" id="btn-out" disabled onclick="startCheck('OUT')">ออกงาน<small>สแกนหน้า</small></button>
+    </div>
+
+    <div class="card">
+      <h2>วันนี้</h2>
+      <ul class="log" id="today"><li class="mute">ยังไม่มีการลงเวลา</li></ul>
+    </div>
+
+    <div class="center" style="margin-top:auto;padding-top:18px">
+      <button class="link" onclick="openRegister()">ลงทะเบียนใบหน้าใหม่ (ผู้ดูแล)</button>
+    </div>
+  </section>
+
+  <!-- ลงทะเบียน -->
+  <section id="scr-register" class="screen">
+    <h1>ลงทะเบียนใบหน้า</h1>
+    <p class="mute" id="reg-who"></p>
+    <div class="card">
+      <div class="consent">
+        <b>ความยินยอมในการเก็บข้อมูลชีวภาพ (PDPA)</b><br>
+        ระบบจะเก็บข้อมูลใบหน้าในรูปแบบตัวเลขเข้ารหัส (ไม่เก็บรูปถ่าย) เพื่อใช้ยืนยันตัวตนในการลงเวลาทำงานเท่านั้น
+        พร้อมบันทึกตำแหน่ง GPS ขณะลงเวลา ข้อมูลจะเก็บไว้ตลอดระยะเวลาการจ้างงาน และท่านขอให้ลบได้โดยแจ้งผู้ดูแลระบบ
+      </div>
+      <label class="check"><input type="checkbox" id="reg-consent"> ข้าพเจ้ายินยอมให้เก็บและใช้ข้อมูลใบหน้าตามที่ระบุข้างต้น</label>
+      <label for="reg-pin">รหัสผู้ดูแล</label>
+      <input id="reg-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="ให้ผู้ดูแลกรอก">
+      <div class="err" id="reg-err"></div>
+      <button class="btn" id="btn-reg">เริ่มสแกนใบหน้า</button>
+      <button class="btn ghost" id="btn-reg-cancel">ยกเลิก</button>
+    </div>
+  </section>
+
+  <!-- กล้อง -->
+  <section id="scr-camera" class="screen">
+    <div class="center" id="cam-title" style="font-weight:700;font-size:18px">สแกนหน้า</div>
+    <div class="cam-wrap">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="oval" id="oval"></div>
+    </div>
+    <div class="progress"><i id="prog"></i></div>
+    <div class="hint" id="hint">กำลังเปิดกล้อง...</div>
+    <div class="sub" id="sub"></div>
+    <button class="btn ghost" onclick="cancelScan()">ยกเลิก</button>
+  </section>
+
+  <!-- ผลลัพธ์ -->
+  <section id="scr-result" class="screen">
+    <div class="res-icon" id="res-icon">✓</div>
+    <div class="res-title" id="res-title"></div>
+    <div class="res-time" id="res-time"></div>
+    <div class="res-msg" id="res-msg"></div>
+    <button class="btn" style="margin-top:auto" onclick="goHome()">กลับหน้าหลัก</button>
+  </section>
+</div>
+
+<script>
+/* ============================================================
+   ตั้งค่า — วาง URL เว็บแอปจาก Apps Script ตรงนี้
+   ============================================================ */
+const CONFIG = {
+  SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxMLKIf38MorgscrX_glLs96fBinXAe-szmjB-k_6KJpFobVcT5sAMLEWq0nzMCYrkK_g/exec',
+  MODEL_URL: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/',
+  SCAN_TIMEOUT_MS: 25000,
+  REGISTER_SAMPLES: 5,
+  CHECK_SAMPLES: 3,
+};
+
+const $ = id => document.getElementById(id);
+const state = { emp: null, settings: null, pos: null, watchId: null, stream: null, scanning: false, clockTimer: null };
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+let detectorOpts;
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  window.scrollTo(0, 0);
+}
+
+async function api(action, data = {}) {
+  if (!/^https:\/\//.test(CONFIG.SCRIPT_URL)) throw new Error('ยังไม่ได้ใส่ SCRIPT_URL ในไฟล์ index.html');
+  let r;
+  try {
+    // ไม่ใส่ Content-Type เพื่อเลี่ยง CORS preflight ของ Apps Script
+    r = await fetch(CONFIG.SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action, ...data }) });
+  } catch (e) { throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบอินเทอร์เน็ต'); }
+  let j;
+  try { j = await r.json(); } catch (e) { throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (ตรวจสอบการ Deploy ว่าให้ "ทุกคน" เข้าถึงได้)'); }
+  if (!j.ok) throw new Error(j.error || 'เกิดข้อผิดพลาด');
+  return j;
+}
+
+/* ---------------- เริ่มระบบ ---------------- */
+async function init() {
+  const msg = $('load-msg');
+  try {
+    if (!window.isSecureContext) throw new Error('ต้องเปิดผ่าน https:// เท่านั้น (กล้องและ GPS จึงจะทำงาน)');
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('เบราว์เซอร์นี้ไม่รองรับกล้อง ลองใช้ Chrome หรือ Safari');
+    if (typeof faceapi === 'undefined') throw new Error('โหลดตัวตรวจจับใบหน้าไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต');
+
+    msg.textContent = 'กำลังโหลดตัวตรวจจับใบหน้า... (ครั้งแรกอาจใช้เวลาสักครู่)';
+    try { await faceapi.tf.setBackend('webgl'); } catch (e) {}
+    await faceapi.tf.ready();
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(CONFIG.MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(CONFIG.MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(CONFIG.MODEL_URL),
+    ]);
+    detectorOpts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+
+    msg.textContent = 'กำลังโหลดการตั้งค่า...';
+    state.settings = (await api('config')).settings;
+
+    const id = store.get('empId');
+    if (id) await loadEmployee(id);
+    else show('scr-setup');
+  } catch (e) {
+    $('load-spin').style.display = 'none';
+    msg.textContent = '❌ ' + e.message;
+    $('load-retry').style.display = 'flex';
+  }
+}
+
+async function loadEmployee(id) {
+  const j = await api('employee', { id });
+  state.emp = j.employee;
+  store.set('empId', state.emp.id);
+  if (!state.emp.registered) openRegister();
+  else goHome();
+}
+
+$('btn-setup').onclick = async () => {
+  const btn = $('btn-setup'), err = $('setup-err');
+  const id = $('in-id').value.trim();
+  err.textContent = '';
+  if (!id) { err.textContent = 'กรุณาใส่รหัสพนักงาน'; return; }
+  btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ...';
+  try { await loadEmployee(id); }
+  catch (e) { err.textContent = e.message; }
+  finally { btn.disabled = false; btn.textContent = 'ถัดไป'; }
+};
+
+function switchUser() {
+  if (!confirm('ต้องการเปลี่ยนผู้ใช้บนมือถือเครื่องนี้ใช่ไหม?')) return;
+  store.del('empId'); state.emp = null;
+  $('in-id').value = '';
+  show('scr-setup');
+}
+
+/* ---------------- หน้าหลัก ---------------- */
+function goHome() {
+  closeCamera();
+  if (!state.emp) { show('scr-setup'); return; }
+  $('h-name').textContent = state.emp.name;
+  $('h-id').textContent = 'รหัส ' + state.emp.id + ' · ' + state.settings.officeName;
+  show('scr-home');
+  startClock();
+  startGps();
+  loadToday();
+}
+
+function startClock() {
+  const tick = () => {
+    const now = new Date();
+    $('clock').textContent = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    $('date').textContent = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+  tick();
+  clearInterval(state.clockTimer);
+  state.clockTimer = setInterval(tick, 1000);
+}
+
+async function loadToday() {
+  const ul = $('today');
+  try {
+    const j = await api('today', { id: state.emp.id });
+    ul.innerHTML = j.items.length
+      ? j.items.map(i => `<li><span class="tag ${i.label === 'ออกงาน' ? 'out' : 'in'}">${i.label}</span><span>${i.time} น.</span></li>`).join('')
+      : '<li class="mute">ยังไม่มีการลงเวลา</li>';
+  } catch (e) { ul.innerHTML = `<li class="mute">โหลดไม่ได้: ${escapeHtml(e.message)}</li>`; }
+}
+
+/* ---------------- GPS ---------------- */
+function startGps() {
+  if (state.watchId != null) { updateGps(); return; }
+  if (!navigator.geolocation) { setGps('bad', 'มือถือไม่รองรับ GPS'); return; }
+  setGps('wait', 'กำลังหาตำแหน่ง...');
+  state.watchId = navigator.geolocation.watchPosition(
+    p => { state.pos = p.coords; updateGps(); },
+    err => {
+      state.pos = null;
+      setGps('bad', err.code === 1
+        ? 'กรุณาอนุญาตให้เว็บนี้เข้าถึงตำแหน่ง (ตั้งค่าเบราว์เซอร์ > ตำแหน่ง)'
+        : 'หาตำแหน่งไม่ได้ เปิด GPS แล้วลองใหม่');
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+  );
+}
+
+function updateGps() {
+  const s = state.settings, p = state.pos;
+  if (!p) return;
+  const d = Math.round(haversine(p.latitude, p.longitude, s.lat, s.lng));
+  const acc = Math.round(p.accuracy);
+  if (acc > s.maxAccuracy) setGps('wait', `GPS ยังไม่แม่นยำ (±${acc} ม.) กำลังรอ...`);
+  else if (d <= s.radius) setGps('ok', `อยู่ในพื้นที่ ${s.officeName} (ห่าง ${d} ม.)`);
+  else setGps('bad', `อยู่นอกพื้นที่ — ห่าง ${fmtDist(d)} (ต้องไม่เกิน ${s.radius} ม.)`);
+}
+
+function setGps(cls, text) {
+  $('gps').className = 'gps ' + cls;
+  $('gps-text').textContent = text;
+  const ok = cls === 'ok';
+  $('btn-in').disabled = !ok;
+  $('btn-out').disabled = !ok;
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000, r = Math.PI / 180;
+  const a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lng2 - lng1) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+const fmtDist = d => d >= 1000 ? (d / 1000).toFixed(1) + ' กม.' : d + ' ม.';
+
+/* ---------------- กล้อง ---------------- */
+async function openCamera() {
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false
+    });
+  } catch (e) {
+    throw new Error(e.name === 'NotAllowedError'
+      ? 'กรุณาอนุญาตให้เว็บนี้ใช้กล้อง (ตั้งค่าเบราว์เซอร์ > กล้อง)'
+      : 'เปิดกล้องไม่ได้: ' + e.message);
+  }
+  const v = $('video');
+  v.srcObject = state.stream;
+  await v.play();
+  await new Promise(r => v.readyState >= 2 ? r() : v.onloadeddata = r);
+}
+
+function closeCamera() {
+  state.scanning = false;
+  if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+  state.stream = null;
+  $('video').srcObject = null;
+}
+
+function cancelScan() {
+  closeCamera();
+  if (state.emp && state.emp.registered) goHome(); else show('scr-register');
+}
+
+function setHint(text, sub = '', progress = null) {
+  $('hint').textContent = text;
+  $('sub').textContent = sub;
+  if (progress != null) $('prog').style.width = Math.round(progress * 100) + '%';
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function eyeRatio(eye) {
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  return (d(eye[1], eye[5]) + d(eye[2], eye[4])) / (2 * d(eye[0], eye[3]));
+}
+
+/** ตรวจคุณภาพภาพ: ต้องมีหน้าเดียว ขนาดพอดี อยู่กลางกรอบ */
+function faceProblem(dets, v) {
+  if (!dets.length) return 'ไม่พบใบหน้า — มองตรงเข้ากล้อง';
+  if (dets.length > 1) return 'พบหลายใบหน้า — ให้มีคนเดียวในกล้อง';
+  const box = dets[0].detection.box;
+  const w = box.width / v.videoWidth;
+  if (w < 0.28) return 'ขยับหน้าเข้ามาใกล้อีกนิด';
+  if (w > 0.8) return 'ถอยออกไปอีกนิด';
+  const cx = (box.x + box.width / 2) / v.videoWidth;
+  if (cx < 0.25 || cx > 0.75) return 'เลื่อนหน้าให้อยู่กลางกรอบ';
+  if (dets[0].detection.score < 0.6) return 'แสงน้อยเกินไป — หันหน้าเข้าหาแสง';
+  return null;
+}
+
+function average(list) {
+  const out = new Array(128).fill(0);
+  list.forEach(d => d.forEach((x, i) => { out[i] += x / list.length; }));
+  return out.map(x => Math.round(x * 100000) / 100000);
+}
+const dist = (a, b) => Math.sqrt(a.reduce((s, x, i) => s + (x - b[i]) ** 2, 0));
+
+/**
+ * สแกนหน้า
+ * mode 'check'    : ต้องกระพริบตาก่อน (กันใช้รูปถ่าย) แล้วเก็บ 3 เฟรม
+ * mode 'register' : เก็บ 5 เฟรมขณะขยับหน้าเล็กน้อย
+ */
+async function scanFace(mode) {
+  const v = $('video'), oval = $('oval');
+  const need = mode === 'register' ? CONFIG.REGISTER_SAMPLES : CONFIG.CHECK_SAMPLES;
+  const started = Date.now();
+  const ears = [];
+  let closed = false, blinked = mode === 'register';
+  const samples = [];
+  oval.className = 'oval';
+  state.scanning = true;
+
+  while (state.scanning) {
+    if (Date.now() - started > CONFIG.SCAN_TIMEOUT_MS) {
+      throw new Error(blinked ? 'หมดเวลา จับใบหน้าไม่ชัด ลองใหม่ในที่สว่าง' : 'หมดเวลา ไม่พบการกระพริบตา ลองใหม่อีกครั้ง');
+    }
+
+    if (!blinked) {
+      // ช่วงรอกระพริบตา: ใช้แค่จุดบนใบหน้า (เร็ว จับการกระพริบทัน)
+      const dets = await faceapi.detectAllFaces(v, detectorOpts).withFaceLandmarks();
+      if (!state.scanning) break;
+      const prob = faceProblem(dets, v);
+      if (prob) { oval.className = 'oval'; setHint(prob, '', 0); ears.length = 0; closed = false; continue; }
+      oval.className = 'oval good';
+      const lm = dets[0].landmarks;
+      const e = (eyeRatio(lm.getLeftEye()) + eyeRatio(lm.getRightEye())) / 2;
+      ears.push(e); if (ears.length > 15) ears.shift();
+      const open = Math.max(...ears);
+      if (ears.length >= 4) {
+        if (!closed && e < open * 0.75) closed = true;
+        else if (closed && e > open * 0.88) blinked = true;
+      }
+      setHint(blinked ? 'ดีมาก! นิ่งไว้สักครู่' : 'กระพริบตา 1 ครั้ง', 'ยืนยันว่าเป็นคนจริง ไม่ใช่รูปถ่าย', blinked ? 0.4 : 0.15);
+      continue;
+    }
+
+    // ช่วงเก็บลายใบหน้า
+    const dets = await faceapi.detectAllFaces(v, detectorOpts).withFaceLandmarks().withFaceDescriptors();
+    if (!state.scanning) break;
+    const prob = faceProblem(dets, v);
+    if (prob) { oval.className = 'oval'; setHint(prob); continue; }
+    const d = Array.from(dets[0].descriptor);
+    // ทุกเฟรมต้องเป็นคนเดียวกัน
+    if (samples.length && dist(d, samples[0]) > 0.6) { samples.length = 0; setHint('ใบหน้าเปลี่ยนไป เริ่มเก็บใหม่'); continue; }
+    samples.push(d);
+    oval.className = 'oval good';
+    const base = mode === 'register' ? 0 : 0.4;
+    setHint(mode === 'register' ? 'ค่อย ๆ หันซ้าย–ขวาเล็กน้อย' : 'นิ่งไว้...',
+            `เก็บข้อมูล ${samples.length}/${need}`, base + (1 - base) * samples.length / need);
+    if (samples.length >= need) { oval.className = 'oval done'; return average(samples); }
+    await sleep(mode === 'register' ? 350 : 120);
+  }
+  throw new Error('ยกเลิกแล้ว');
+}
+
+/* ---------------- ลงเวลา ---------------- */
+async function startCheck(type) {
+  const label = type === 'OUT' ? 'ออกงาน' : 'เข้างาน';
+  const pos = state.pos;
+  if (!pos) { alert('ยังไม่พบตำแหน่ง GPS'); return; }
+  $('cam-title').textContent = 'สแกนหน้า · ' + label;
+  setHint('กำลังเปิดกล้อง...', '', 0);
+  show('scr-camera');
+  try {
+    await openCamera();
+    const descriptor = await scanFace('check');
+    setHint('กำลังตรวจสอบ...', '', 1);
+    closeCamera();
+    const p = state.pos || pos; // ใช้ตำแหน่งล่าสุด
+    const j = await api('check', {
+      id: state.emp.id, type, descriptor,
+      lat: p.latitude, lng: p.longitude, acc: p.accuracy
+    });
+    showResult(true, label + 'สำเร็จ', j.time + ' น.', `${escapeHtml(j.name)}<br>ห่างจากที่ทำงาน ${j.distance} ม.`);
+  } catch (e) {
+    if (e.message === 'ยกเลิกแล้ว') return;
+    closeCamera();
+    showResult(false, label + 'ไม่สำเร็จ', '', escapeHtml(e.message));
+  }
+}
+
+function showResult(ok, title, time, msg) {
+  $('res-icon').className = 'res-icon ' + (ok ? 'ok' : 'bad');
+  $('res-icon').textContent = ok ? '✓' : '✕';
+  $('res-title').textContent = title;
+  $('res-time').textContent = time;
+  $('res-msg').innerHTML = msg;
+  show('scr-result');
+  if (ok && navigator.vibrate) navigator.vibrate(120);
+}
+
+/* ---------------- ลงทะเบียน ---------------- */
+function openRegister() {
+  closeCamera();
+  $('reg-who').textContent = `${state.emp.name} (รหัส ${state.emp.id})`;
+  $('reg-consent').checked = false;
+  $('reg-pin').value = '';
+  $('reg-err').textContent = '';
+  $('btn-reg-cancel').style.display = state.emp.registered ? 'flex' : 'none';
+  show('scr-register');
+}
+
+$('btn-reg-cancel').onclick = () => goHome();
+
+$('btn-reg').onclick = async () => {
+  const err = $('reg-err');
+  err.textContent = '';
+  if (!$('reg-consent').checked) { err.textContent = 'กรุณากดยินยอมก่อน'; return; }
+  const pin = $('reg-pin').value.trim();
+  if (!pin) { err.textContent = 'กรุณาให้ผู้ดูแลใส่รหัส'; return; }
+
+  $('cam-title').textContent = 'ลงทะเบียนใบหน้า';
+  setHint('กำลังเปิดกล้อง...', '', 0);
+  show('scr-camera');
+  try {
+    await openCamera();
+    const descriptor = await scanFace('register');
+    setHint('กำลังบันทึก...', '', 1);
+    closeCamera();
+    await api('register', { id: state.emp.id, pin, consent: true, descriptor });
+    state.emp.registered = true;
+    showResult(true, 'ลงทะเบียนสำเร็จ', '', `${escapeHtml(state.emp.name)}<br>ใช้สแกนหน้าลงเวลาได้แล้ว`);
+  } catch (e) {
+    if (e.message === 'ยกเลิกแล้ว') return;
+    closeCamera();
+    show('scr-register');
+    err.textContent = e.message;
+  }
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ปิดกล้องเมื่อสลับแอป
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state.scanning) cancelScan();
+});
+
+init();
+</script>
+</body>
+</html>
